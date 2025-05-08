@@ -56,6 +56,8 @@ class DemoAgent(Agent):
         use_html: bool,
         use_axtree: bool,
         use_screenshot: bool,
+        llm_base_url: str = "https://api.openai.com/v1",
+        llm_api_key: str = None,
     ) -> None:
         super().__init__()
         self.model_name = model_name
@@ -67,7 +69,10 @@ class DemoAgent(Agent):
         if not (use_html or use_axtree):
             raise ValueError(f"Either use_html or use_axtree must be set to True.")
 
-        self.openai_client = openai.OpenAI()
+        self.openai_client = openai.OpenAI(
+            base_url=llm_base_url,
+            api_key=llm_api_key,
+        )
 
         self.action_set = HighLevelActionSet(
             subsets=["chat", "tab", "nav", "bid", "infeas"],  # define a subset of the action space
@@ -344,6 +349,8 @@ class DemoAgentArgs(AbstractAgentArgs):
     use_html: bool = False
     use_axtree: bool = True
     use_screenshot: bool = False
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = None
 
     def make_agent(self):
         return DemoAgent(
@@ -353,4 +360,6 @@ class DemoAgentArgs(AbstractAgentArgs):
             use_html=self.use_html,
             use_axtree=self.use_axtree,
             use_screenshot=self.use_screenshot,
+            llm_base_url=self.llm_base_url,
+            llm_api_key=self.llm_api_key,
         )

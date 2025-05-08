@@ -63,17 +63,31 @@ def parse_args():
         help="Use screenshot in the agent's observation space.",
     )
 
+    parser.add_argument(
+        "--llm_api_key",
+        type=str,
+        default="EMPTY",
+        help="API key for the LLM provider. If not provided, the agent will use a local model.",
+    )
+
+    parser.add_argument(
+        "--llm_base_url",
+        type=str,
+        default="http://localhost:8000/v1",
+        help="API base URL for the LLM provider. If not provided, the agent will use a local model.",
+    )
+
     return parser.parse_args()
 
 
 def main():
-    print(
-        """\
---- WARNING ---
-This is a basic agent for demo purposes.
-Visit AgentLab for more capable agents with advanced features.
-https://github.com/ServiceNow/AgentLab"""
-    )
+#     print(
+#         """\
+# --- WARNING ---
+# This is a basic agent for demo purposes.
+# Visit AgentLab for more capable agents with advanced features.
+# https://github.com/ServiceNow/AgentLab"""
+#     )
 
     args = parse_args()
 
@@ -85,6 +99,8 @@ https://github.com/ServiceNow/AgentLab"""
         use_html=args.use_html,
         use_axtree=args.use_axtree,
         use_screenshot=args.use_screenshot,
+        llm_api_key=args.llm_api_key,
+        llm_base_url=args.llm_base_url,
     )
 
     # setting up environment config
@@ -92,7 +108,7 @@ https://github.com/ServiceNow/AgentLab"""
         task_name=args.task_name,
         task_seed=None,
         max_steps=100,
-        headless=False,  # keep the browser open
+        headless=True,  # run benchmark in headless mode
         # viewport={"width": 1500, "height": 1280},  # can be played with if needed
     )
 
