@@ -84,6 +84,7 @@ class GenericWebArenaTask(AbstractBrowserTask):
                 )
 
         self.task_configs = task_configs
+        print(f"Task configs: {self.task_configs}")
 
     def setup(self, page: playwright.sync_api.Page) -> tuple[str, dict]:
         # import webarena on instanciation

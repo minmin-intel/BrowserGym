@@ -56,6 +56,9 @@ class WebArenaInstance:
 
         self.credentials = ACCOUNTS
 
+        print(f"URLs: {self.urls}")
+        print(f"Homepage: {self.home_url}")
+
     def full_reset(self, skip_if_not_set: bool = True):
         base_url = os.environ.get(self.RESET_URL_VAR, None)
 

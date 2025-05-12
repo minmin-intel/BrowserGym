@@ -250,5 +250,60 @@ def execute_python_code(
     exec(code, globals)
 ```
 
+8. Browser setup
+In webarena instance.py, WebArenaInstance is defined, in its init function, things to note
+```python
+#1. Get the URLs env vars: we set WA_XXX_URL, but original webarena code needs XXX_URL as env var
+os.environ[key] = os.environ[append_wa(key)]
 
+#2. set up the urls lookup dict.
+from webarena.browser_env.env_config import (
+            ACCOUNTS,
+            GITLAB,
+            HOMEPAGE,
+            MAP,
+            REDDIT,
+            SHOPPING,
+            SHOPPING_ADMIN,
+            WIKIPEDIA,
+        )
+
+self.urls = {
+    "reddit": REDDIT,
+    "gitlab": GITLAB,
+    "shopping": SHOPPING,
+    "shopping_admin": SHOPPING_ADMIN,
+    "wikipedia": WIKIPEDIA,
+    "map": MAP,
+}
+self.home_url = HOMEPAGE
+```
+
+Then in webarena task.py, WebArenaTask is defined, in its init function, things to note:
+```python
+# raw task config https://github.com/web-arena-x/webarena/blob/main/config_files/test.raw.json
+# the start_url is a string like __XXX__
+# so replace the __XXX__ with the actual url in the webarena_instance.urls
+for pattern, url_key in {
+            "__GITLAB__": "gitlab",
+            "__REDDIT__": "reddit",
+            "__SHOPPING__": "shopping",
+            "__SHOPPING_ADMIN__": "shopping_admin",
+            "__WIKIPEDIA__": "wikipedia",
+            "__MAP__": "map",
+        }.items():
+            all_configs_str = all_configs_str.replace(pattern, self.webarena_instance.urls[url_key])
+```
+
+Then in the WebArenaTask setup() function, go to the start_url page.
+```python
+if self.config["start_url"]:
+            start_urls = self.config["start_url"].split(" |AND| ")
+            for i, url in enumerate(start_urls):
+                page.goto(url)
+                if i < len(start_urls) - 1:
+                    page = page.context.new_page()
+```
+
+Where does the `page` come from?
 
