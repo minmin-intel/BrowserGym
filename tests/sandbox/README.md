@@ -1,6 +1,6 @@
 # Playwright Browser Sandbox
 
-This is a containerized environment for running Playwright with Chrome browser and exposing browser actions through a RESTful API.
+This is a containerized environment for running Playwright with Chrome browser and exposing browser actions through a RESTful API. The container is based on the official Microsoft Playwright Docker image that comes with pre-installed browsers.
 
 ## Features
 
@@ -12,6 +12,7 @@ This is a containerized environment for running Playwright with Chrome browser a
 - Wait for elements to appear
 - Evaluate JavaScript in the page context
 - Take screenshots of pages or specific elements
+- Get accessibility tree snapshots for accessibility testing
 - Health check endpoint
 
 ## Building the Container
@@ -20,10 +21,21 @@ This is a containerized environment for running Playwright with Chrome browser a
 docker build -t playwright-sandbox .
 ```
 
+# Building with HTTP Proxy
+
+If you're behind a corporate proxy, you can use build arguments to configure the proxy settings:
+
+```bash
+docker build --build-arg http_proxy=$http_proxy \
+             --build-arg https_proxy=$https_proxy \
+             -t playwright-sandbox .
+```
+
+
 ## Running the Container
 
 ```bash
-docker run -p 8000:8000 playwright-sandbox
+docker run --name pw-sandbox -v $WORKDIR/BrowserGym/tests/sandbox:/app -e http_proxy=$http_proxy -e https_proxy=$https_proxy -p 8000:8000 -d playwright-sandbox
 ```
 
 This will start the server on port 8000.
@@ -58,10 +70,13 @@ You can use the included `client.py` script to interact with the API:
 
 ```bash
 # Run with default options (navigates to google.com in headless mode)
-python client.py
+python3 client.py
 
 # Run with custom options
-python client.py --url https://example.com --headless=false
+python3 client.py --url https://example.com --headless=false
+
+# Specify custom output file for accessibility tree YAML
+python3 client.py --url https://www.w3.org/WAI/ --a11y-output=w3c_accessibility.yaml
 ```
 
 ## API Examples
@@ -123,11 +138,94 @@ screenshot_response = requests.post(
 )
 screenshot_data = screenshot_response.json()
 screenshot_base64 = screenshot_data["screenshot"]
+
+# Get accessibility tree snapshot
+accessibility_response = requests.post(
+    f"http://localhost:8000/page/{page_id}/accessibility_snapshot"
+)
+accessibility_data = accessibility_response.json()
+snapshot = accessibility_data["snapshot"]
+
+# Using the client's built-in YAML conversion
+from client import PlaywrightClient
+
+client = PlaywrightClient()
+# ...setup and navigate to a page...
+
+# Get accessibility tree as YAML string
+yaml_string = client.accessibility_snapshot_as_yaml()
+
+# Save YAML to file
+with open("a11y_tree.yaml", "w") as f:
+    f.write(yaml_string)
 ```
 
 ## Environment Variables
 
 - `PLAYWRIGHT_HEADLESS`: Set to "false" to run browsers in non-headless mode (default: "true")
+
+## Accessibility Testing
+
+The sandbox includes features for accessibility testing:
+
+1. **API Endpoint**: `/page/{page_id}/accessibility_snapshot` returns the complete accessibility tree
+2. **YAML Conversion**: The client can convert the accessibility tree to YAML format
+3. **Command Line Option**: `--a11y-output` specifies where to save the YAML file
+
+### Sample YAML Output
+
+```yaml
+role: WebArea
+name: Document
+children:
+  - role: heading
+    name: Welcome to the Accessibility Test Page
+    level: 1
+  - role: link
+    name: Skip to content
+    description: Bypass navigation
+  - role: navigation
+    name: Main Navigation
+    children:
+      - role: button
+        name: Menu
+        expanded: false
+```
+
+This structured format makes it easier to:
+- Analyze page structure from an accessibility perspective
+- Identify missing ARIA attributes or labels
+- Verify screen reader compatibility
+- Export accessibility information for reporting
+
+## Troubleshooting
+
+### Screenshot Timeout Issues
+
+If you encounter timeout issues when taking screenshots, especially in headless mode, try the following solutions:
+
+1. **Increase the Screenshot Timeout**:
+   ```python
+   # When calling the screenshot method
+   client.screenshot(path="screenshot.png", timeout=90000)  # 90 seconds timeout
+   ```
+
+2. **Add Explicit Waits**:
+   ```python
+   # Wait for the page to be fully loaded
+   client.navigate(url, wait_until="networkidle")
+   time.sleep(3)  # Add a short pause
+   client.screenshot(path="screenshot.png")
+   ```
+
+3. **Additional Browser Launch Arguments**:
+   If using the API directly, add these arguments when launching the browser:
+   ```json
+   {
+     "headless": true,
+     "args": ["--no-sandbox", "--disable-dev-shm-usage"]
+   }
+   ```
 
 ## License
 

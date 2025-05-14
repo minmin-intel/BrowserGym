@@ -70,6 +70,7 @@ class ScreenshotRequest(BaseModel):
     full_page: bool = False
     path: Optional[str] = None
     selector: Optional[str] = None
+    timeout: int = 60000  # Default timeout of 60 seconds
 
 @app.on_event("startup")
 async def startup_event():
@@ -90,7 +91,17 @@ async def shutdown_event():
 async def launch_browser(config: BrowserConfig):
     """Launch a new browser instance."""
     try:
-        browser = await playwright.chromium.launch(headless=config.headless)
+        # Add additional launch options for better container compatibility
+        launch_options = {
+            "headless": config.headless,
+            "args": [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+            ]
+        }
+        browser = await playwright.chromium.launch(**launch_options)
         browser_id = str(id(browser))
         browser_pool[browser_id] = browser
         return {"browser_id": browser_id, "status": "launched"}
@@ -238,10 +249,24 @@ async def screenshot(page_id: str, request: ScreenshotRequest):
     
     try:
         page = page_pool[page_id]
-        options = {"full_page": request.full_page}
+        # Add timeout to options and increase it for container environments
+        options = {
+            "full_page": request.full_page,
+            "timeout": 60000  # Increase timeout to 60 seconds
+        }
         
         if request.path:
             options["path"] = request.path
+            
+        # Make sure the page is ready for screenshot by checking document state
+        await page.evaluate("() => document.readyState === 'complete'")
+        
+        # Add a wait for the page to be sure it's fully loaded
+        try:
+            await page.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            # If timeout waiting for networkidle, continue anyway
+            pass
             
         if request.selector:
             element = await page.query_selector(request.selector)
@@ -305,6 +330,21 @@ async def close_browser(browser_id: str):
         return {"status": "closed"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to close browser: {str(e)}")
+
+
+@app.post("/page/{page_id}/accessibility_snapshot", response_model=Dict)
+async def accessibility_snapshot(page_id: str):
+    """Get the accessibility tree snapshot of the current page."""
+    if page_id not in page_pool:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    try:
+        page = page_pool[page_id]
+        # Get the accessibility snapshot using Playwright's accessibility API
+        snapshot = await page.accessibility.snapshot()
+        return {"status": "success", "snapshot": snapshot}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get accessibility snapshot: {str(e)}")
 
 
 @app.get("/health")

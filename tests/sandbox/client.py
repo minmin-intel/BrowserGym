@@ -8,7 +8,8 @@ import json
 import requests
 import sys
 import time
-from typing import Dict, Optional
+import yaml
+from typing import Dict, Optional, Any
 
 class PlaywrightClient:
     def __init__(self, base_url: str = "http://localhost:8000"):
@@ -96,16 +97,73 @@ class PlaywrightClient:
         )
         return response.json()
     
-    def screenshot(self, path: Optional[str] = None, full_page: bool = False) -> Dict:
+    def screenshot(self, path: Optional[str] = None, full_page: bool = False, timeout: int = 60000) -> Dict:
         """Take a screenshot of the page."""
         if not self.page_id:
             raise ValueError("Page not created yet")
         
         response = requests.post(
             f"{self.base_url}/page/{self.page_id}/screenshot",
-            json={"path": path, "full_page": full_page}
+            json={"path": path, "full_page": full_page, "timeout": timeout}
         )
         return response.json()
+    
+    def accessibility_snapshot(self) -> Dict:
+        """Get the accessibility tree snapshot of the current page."""
+        if not self.page_id:
+            raise ValueError("Page not created yet")
+        
+        response = requests.post(
+            f"{self.base_url}/page/{self.page_id}/accessibility_snapshot"
+        )
+        return response.json()
+        
+    def accessibility_snapshot_as_yaml(self) -> str:
+        """Get the accessibility tree snapshot as a YAML formatted string."""
+        result = self.accessibility_snapshot()
+        if "snapshot" not in result:
+            raise ValueError("Invalid accessibility snapshot response")
+            
+        return self._convert_a11y_to_yaml(result["snapshot"])
+    
+    def _convert_a11y_to_yaml(self, node: Dict[str, Any], indent: int = 0) -> str:
+        """
+        Recursively convert an accessibility node to a YAML formatted string.
+        
+        Args:
+            node: The accessibility node to convert
+            indent: Current indentation level
+            
+        Returns:
+            A YAML formatted string representing the accessibility tree
+        """
+        if not node:
+            return ""
+            
+        # Create a simplified representation of the node
+        simplified = {}
+        
+        # Add important accessibility properties
+        for key in ["role", "name", "value", "description", "checked"]:
+            if key in node and node[key] is not None and node[key] != "":
+                simplified[key] = node[key]
+        
+        # Process children separately
+        children = node.get("children", [])
+        
+        # Convert to YAML string
+        yaml_str = yaml.dump(simplified, default_flow_style=False, sort_keys=False)
+        
+        # Process children recursively
+        if children:
+            yaml_str = yaml_str.rstrip() + "\nchildren:\n"
+            for child in children:
+                child_yaml = self._convert_a11y_to_yaml(child, indent + 2)
+                # Add indentation to child YAML
+                indented_child = "  " + child_yaml.replace("\n", "\n  ")
+                yaml_str += "  - " + indented_child.lstrip() + "\n"
+        
+        return yaml_str
     
     def cleanup(self) -> None:
         """Close all resources."""
@@ -124,6 +182,8 @@ def main():
     parser.add_argument("--url", type=str, default="https://www.google.com", help="URL to navigate to")
     parser.add_argument("--headless", action="store_true", help="Run browser in headless mode")
     parser.add_argument("--server", type=str, default="http://localhost:8000", help="API server URL")
+    parser.add_argument("--a11y-output", type=str, default="accessibility_tree.yaml", 
+                        help="Output file path for accessibility tree YAML (default: accessibility_tree.yaml)")
     
     args = parser.parse_args()
     
@@ -142,6 +202,10 @@ def main():
         print(f"Navigating to {args.url}...")
         client.navigate(args.url)
         
+        # Add a short wait to ensure page is fully loaded before screenshot
+        print("Waiting for page to load completely...")
+        time.sleep(2)
+        
         print("Taking screenshot...")
         screenshot_result = client.screenshot(path="screenshot.png")
         print(f"Screenshot saved: {screenshot_result}")
@@ -150,6 +214,35 @@ def main():
         print("Getting page title...")
         title_result = client.evaluate("document.title")
         print(f"Page title: {title_result.get('result', '')}")
+        
+        # Get accessibility snapshot
+        print("Getting accessibility tree snapshot...")
+        try:
+            a11y_result = client.accessibility_snapshot()
+            root_role = a11y_result.get('snapshot', {}).get('role', 'unknown')
+            print(f"Accessibility tree root: {root_role}")
+            
+            # Convert to YAML format
+            print("\nConverting accessibility tree to YAML format...")
+            yaml_output = client.accessibility_snapshot_as_yaml()
+            
+            # Save YAML to file
+            # yaml_file = args.a11y_output
+            # with open(yaml_file, "w") as f:
+            #     f.write(yaml_output)
+            # print(f"YAML accessibility tree saved to {yaml_file}")
+            
+            # Print a sample of the YAML (first 10 lines)
+            print("\nSample of YAML output:")
+            yaml_lines = yaml_output.split('\n')
+            sample_lines = min(10, len(yaml_lines))
+            for i in range(sample_lines):
+                print(yaml_lines[i])
+            if len(yaml_lines) > sample_lines:
+                print("... (truncated)")
+            
+        except Exception as e:
+            print(f"Failed to get accessibility snapshot: {e}")
         
         # Wait a bit to see the browser if running in non-headless mode
         if not args.headless:
