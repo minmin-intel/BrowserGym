@@ -3,6 +3,7 @@ import asyncio
 import subprocess
 import os
 from playwright.sync_api import sync_playwright
+import time
 
 
 ENV_VARS = ("SHOPPING", "SHOPPING_ADMIN", "REDDIT", "GITLAB", "WIKIPEDIA", "MAP", "HOMEPAGE")
@@ -76,6 +77,7 @@ def test_login_with_playwright():
 
 async def login():
     url, username, password = get_site_login("shopping_admin")
+    cleanup_before_launch_browser()
     async with Client("http://localhost:8931/mcp") as client:
         # # list tools
         # tools = await client.list_tools()
@@ -123,13 +125,22 @@ async def login():
             print(snapshot)
 
 
-async def get_latest_snapshot():
+def cleanup_before_launch_browser():
+    HOME = os.getenv("HOME")
+    print(f"HOME: {HOME}")
+    user_profile_file = os.path.join(HOME, ".cache/ms-playwright/mcp-chrome-profile/SingletonLock")
+    print(f"User profile file: {user_profile_file}")
+    try:
+        os.remove(user_profile_file)
+    except Exception as e:
+        print(f"Error removing user profile file: {e}")
+    time.sleep(1)
+
+
+async def get_latest_snapshot(client):
     url, _, _ = get_site_login("shopping_admin")
-    async with Client("http://localhost:8931/mcp") as client:
-        # capture snapshot of the page
-        asyncio.sleep(5)
-        await client.call_tool("browser_navigate", {"url":url})
-        snapshot = await client.call_tool("browser_snapshot", {})
+    await client.call_tool("browser_navigate", {"url":url})
+    snapshot = await client.call_tool("browser_snapshot", {})
     return snapshot
 
 
@@ -181,7 +192,7 @@ sys_prompt = """
     When you are done, output your final answer in plain text string.
     """
 
-def assemble_prompt(agent_memory: list[dict], user_query:str) -> str:
+def assemble_prompt(agent_memory: list[dict], user_query:str, axtree: str) -> str:
     """
     agent_memory: [{"role": "user", "content": "message"}, {"role": "assistant", "content": "message"}, ...]
     """
@@ -192,6 +203,8 @@ def assemble_prompt(agent_memory: list[dict], user_query:str) -> str:
     
     # Add all agent memory messages to the list
     messages.extend(agent_memory)
+
+    messages.append({"role": "user", "content": f"##Current page:\n{axtree}"})
 
     messages.append({"role": "user", "content": f"Remember the task to accomplish is:\n{user_query}\nNow think step by step and provide the next action to be performed."})
     
@@ -218,11 +231,12 @@ def parse_action(raw_output: str) -> str:
 BOILERPLATE = """
 from fastmcp import Client
 import asyncio
+import time
 
 async with Client("http://localhost:8931/mcp") as client:
     try:
         await client.call_tool({tool_name}, {args})
-        await asyncio.sleep(5)
+        time.sleep(5)
 
     except Exception as e:
         print(f"Error: {{e}}")  
@@ -294,42 +308,65 @@ async def agent_loop():
     agent_memory = []
     n = 1
     MAX_NUM_STEPS = 10
-    while n < MAX_NUM_STEPS:
-        print(f"=======Step {n}/{MAX_NUM_STEPS}========")
-        # get latest snapshot
-        snapshot = await get_latest_snapshot()
-        # add the snapshot to the agent memory
-        agent_memory.append({"role": "user", "content": f"##Current page:\n{snapshot}"})
-        prompt = assemble_prompt(agent_memory, user_query)
+    async with Client("http://localhost:8931/mcp") as client:
+        while n < MAX_NUM_STEPS:
+            print(f"=======Step {n}/{MAX_NUM_STEPS}========")
+            # get latest snapshot
+            snapshot = await get_latest_snapshot(client)
+            filtered_axtree = convert_snapshot_to_axtree_text(snapshot)
+            print(f"** Filtered axtree of current page:\n{filtered_axtree}")
 
-        response = get_response_from_model(prompt)
-        agent_memory.append({"role": "assistant", "content": response})
-        print(f"Response: {response}")
+            # add the snapshot to the agent memory
+            # agent_memory.append({"role": "user", "content": f"##Current page:\n{filtered_axtree}"})
+            prompt = assemble_prompt(agent_memory, user_query, filtered_axtree)
 
-        # action
-        action = get_action(response)
-        print(f"Action: {action}")
-        if action == "FINISHED":
-            print("Agent finished.")
-            break
-        elif action.startswith("Unknown action:"):
-            agent_memory.append({"role": "user", "content": action})
-        else:
-            # execute the action
-            print("Executing action...")
-            # execute the code and save the output as the observation
-            # Create a temporary Python file with the action code
-            observation = execute_action(action)
-            print(f"Observation: {observation}")
-            agent_memory.append({"role": "user", "content": observation})
-            
-        n += 1
+            response = get_response_from_model(prompt)
+            agent_memory.append({"role": "assistant", "content": response})
+            print(f"** LLM Response: {response}")
+
+            # action
+            action = get_action(response)
+            print(f"** Parsed Action: {action}")
+            if action == "FINISHED":
+                print("Agent finished.")
+                break
+            elif action.startswith("Unknown action:"):
+                agent_memory.append({"role": "user", "content": action})
+            else:
+                # execute the action
+                print("Executing action...")
+                # execute the code and save the output as the observation
+                # Create a temporary Python file with the action code
+                observation = execute_action(action)
+                print(f"** Observation: {observation}")
+                agent_memory.append({"role": "user", "content": observation})
+                
+            n += 1
         
 
+def convert_snapshot_to_axtree_text(snapshot) -> str:
+    from utils import filter_snapshot
+    axtree = snapshot[0].text.split("```yaml")[-1].split("```")[0]
+    # with open("axtree.txt", "w") as f:
+    #     f.write(axtree)
+    filtered_axtree = filter_snapshot(axtree)
+    return filtered_axtree
+
+
 async def main():
-    snapshot = await get_latest_snapshot()
-    print(snapshot)
+    n=1
+    cleanup_before_launch_browser()
+    async with Client("http://localhost:8931/mcp") as client:
+        for i in range(n):
+            print(f"=======Trial {i+1}/{n}========")
+            # get the latest snapshot
+            snapshot = await get_latest_snapshot(client)       
+            print("===========================")
+            # time.sleep(5)
+
 
 
 if __name__ == "__main__":
+    
+    # asyncio.run(main())
     asyncio.run(agent_loop())
