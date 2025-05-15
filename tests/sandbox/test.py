@@ -49,6 +49,15 @@ def get_site_login(site: str):
 
     return url, username, password
 
+
+def get_status_from_server_response(response):
+    """
+    Extracts the status from the server response.
+    """
+    status = response.get("status", "unknown")
+    return status
+
+
 def test_login_with_playwright_client():
     """
     Test login functionality using the PlaywrightClient from client.py
@@ -87,7 +96,7 @@ def test_login_with_playwright_client():
         print("Filling username...")
         try:
             username_result = client.get_by_label_fill("Username", username)
-            print("Username field filled successfully")
+            print("User name type: ",get_status_from_server_response(username_result))
         except Exception as e:
             print(f"Warning: Could not fill username field: {e}")
             
@@ -95,7 +104,7 @@ def test_login_with_playwright_client():
         print("Filling password...")
         try:
             password_result = client.get_by_label_fill("Password", password)
-            print("Password field filled successfully")
+            print("Password field: ",get_status_from_server_response(password_result))
         except Exception as e:
             print(f"Warning: Could not fill password field: {e}")
             
@@ -104,7 +113,7 @@ def test_login_with_playwright_client():
         try:
             # Using get_by_role with "button" role and "Sign in" name
             sign_in_result = client.get_by_role_click("button", name="Sign in")
-            print("Sign-in button clicked successfully")
+            print("Sign-in button: ",get_status_from_server_response(sign_in_result))
         except Exception as e:
             print(f"Warning: Could not click sign-in button: {e}")
             # Fallback to JavaScript if needed
@@ -138,6 +147,8 @@ def test_login_with_playwright_client():
         # Get accessibility tree after login
         print("Getting accessibility tree after login...")
         a11y_after = client.accessibility_snapshot()
+        with open("login_accessibility_tree.json", "w") as f:
+            json.dump(a11y_after, f, indent=4)
         
         # Convert to YAML and save
         print("Saving accessibility tree as YAML...")
@@ -145,7 +156,21 @@ def test_login_with_playwright_client():
         with open("login_accessibility_tree.yaml", "w") as f:
             f.write(yaml_output)
         print("YAML accessibility tree saved to login_accessibility_tree.yaml")
+        client.screenshot(path="screenshot_login.png")
         
+        print("Clicking on REPORTS link...")
+        client.get_by_role_click("link", name="REPORTS")
+        time.sleep(3)
+        a11y_after = client.accessibility_snapshot()
+        with open("report_accessibility_tree.json", "w") as f:
+            json.dump(a11y_after, f, indent=4)
+        yaml_output = client.accessibility_snapshot_as_yaml()
+        with open("report_accessibility_tree.yaml", "w") as f:
+            f.write(yaml_output)
+        # get screenshot and save
+        filename = f"screenshot_report.png"
+        client.screenshot(path=filename)
+
         return new_url
     
     except Exception as e:

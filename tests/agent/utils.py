@@ -1,6 +1,7 @@
 import os
-import subprocess
-from prompt import sys_prompt, BOILERPLATE
+import datetime
+from prompt import sys_prompt
+from actions import click, type_text, navigate
 
 def assemble_prompt(agent_memory: list[dict], user_query:str, axtree: str) -> str:
     """
@@ -14,11 +15,12 @@ def assemble_prompt(agent_memory: list[dict], user_query:str, axtree: str) -> st
     # Add all agent memory messages to the list
     messages.extend(agent_memory)
 
-    messages.append({"role": "user", "content": f"##Current page:\n{axtree}"})
+    messages.append({"role": "user", "content": f"##Current page snapshot:\n{axtree}"})
 
     messages.append({"role": "user", "content": f"Remember the task to accomplish is:\n{user_query}\nNow think step by step and provide the next action to be performed."})
     
     # Return the messages list - OpenAI API expects this format
+    # print(f"Prompt:\n{messages}")
     return messages
 
 def parse_action(raw_output: str) -> str:
@@ -38,184 +40,34 @@ def parse_action(raw_output: str) -> str:
     return ""
 
 
-def get_action(raw_output) -> str:
+def execute_action(client, action) -> str:
     """
     Parse the response from the agent and return the action to be performed as executable Python code.
     Based on the accessibility tree information, the appropriate client method will be used.
     """
-    action = parse_action(raw_output)
-
     if action:
         # action format should be: action_name(arg1, arg2, ...)
         if action.startswith("click"):
             # Extract the arguments from the action
-            # Expected format: click("role", "name")
-            try:
-                # Extract all arguments inside the parentheses
-                args_str = action[action.find("(")+1:action.rfind(")")]
-                # Split by comma and strip spaces and quotes, but respect commas inside quotes
-                args = []
-                in_quotes = False
-                current_arg = ""
-                quote_char = None
-                
-                for char in args_str:
-                    if char in ['"', "'"] and (not quote_char or char == quote_char):
-                        in_quotes = not in_quotes
-                        if not in_quotes:
-                            quote_char = None
-                        else:
-                            quote_char = char
-                    
-                    if char == ',' and not in_quotes:
-                        args.append(current_arg.strip())
-                        current_arg = ""
-                    else:
-                        current_arg += char
-                
-                if current_arg:
-                    args.append(current_arg.strip())
-                
-                # Remove quotes from args
-                args = [arg.strip().strip('"\'') for arg in args]
-                
-                # Handle both formats:
-                # click("name") and click("role", "name")
-                if len(args) >= 2:
-                    # Format: click("role", "name")
-                    role = args[0]
-                    element_name = args[1]
-                    
-                    # Verify role is valid
-                    valid_roles = ["button", "link", "checkbox", "textbox", "combobox", "radio", "tab", "menuitem"]
-                    if role.lower() not in valid_roles:
-                        # If role is not valid, swap - maybe user specified name first
-                        element_name, role = role, element_name
-                        # Default to "link" if still invalid
-                        if role.lower() not in valid_roles:
-                            role = "link"
-                elif len(args) == 1:
-                    # Format: click("name")
-                    element_name = args[0]
-                    
-                    # Determine role based on element name
-                    role = "link"  # Default role
-                    
-                    # Check if it contains "button" in the name to determine role
-                    if "button" in element_name.lower():
-                        role = "button"
-                    elif "textbox" in element_name.lower() or "input" in element_name.lower():
-                        role = "textbox"
-                else:
-                    raise ValueError("Not enough arguments for click action")
-                
-                # Use get_by_role_click for accessible elements
-                tool_name = "get_by_role_click"
-                args = f'role="{role}", name="{element_name}"'
-                code = BOILERPLATE.format(tool_name=tool_name, args=args)
-            except Exception as e:
-                code = f"Error parsing click action: {str(e)}"
-                
+            obs = click(client, action)
         elif action.startswith("type"):
-            # Extract the arguments from the action
-            # Expected format: type("element_name", "text_to_type") or type("element_name", "ref_id", "text_to_type")
-            try:
-                # Extract all arguments inside the parentheses
-                args_str = action[action.find("(")+1:action.rfind(")")]
-                # Split by comma and strip spaces, but respect commas inside quotes
-                args = []
-                in_quotes = False
-                current_arg = ""
-                quote_char = None
-                
-                for char in args_str:
-                    if char in ['"', "'"] and (not quote_char or char == quote_char):
-                        in_quotes = not in_quotes
-                        if not in_quotes:
-                            quote_char = None
-                        else:
-                            quote_char = char
-                    
-                    if char == ',' and not in_quotes:
-                        args.append(current_arg.strip())
-                        current_arg = ""
-                    else:
-                        current_arg += char
-                
-                if current_arg:
-                    args.append(current_arg.strip())
-                
-                # Remove quotes from args
-                args = [arg.strip().strip('"\'') for arg in args]
-                
-                # Handle different formats
-                if len(args) >= 3:  # type("element_name", "ref_id", "text_to_type")
-                    element_name = args[0]
-                    text = args[2]
-                elif len(args) == 2:  # type("element_name", "text_to_type")
-                    element_name = args[0]
-                    text = args[1]
-                else:
-                    raise ValueError("Not enough arguments for type action")
-                    
-                # Use get_by_label_fill for text input by label
-                # This helps when working with input fields in accessibility tree
-                tool_name = "get_by_label_fill"
-                args = f'label="{element_name}", text="{text}"'
-                code = BOILERPLATE.format(tool_name=tool_name, args=args)
-            except Exception as e:
-                code = f"Error parsing type action: {str(e)}"
-                
+            obs = type_text(client, action)
         elif action.startswith("navigate"):
-            # Extract the arguments from the action
-            # Expected format: navigate("https://example.com")
-            try:
-                # Extract all arguments inside the parentheses
-                args_str = action[action.find("(")+1:action.rfind(")")]
-                # Strip spaces and quotes
-                url = args_str.strip().strip('"\'')
-                
-                tool_name = "navigate"
-                args = f'url="{url}"'
-                code = BOILERPLATE.format(tool_name=tool_name, args=args)
-            except Exception as e:
-                code = f"Error parsing navigate action: {str(e)}"
+            obs = navigate(client, action)
         else:
             # unknown action
-            code = f"Unknown action: {action}"
+            obs = f"Unknown action: {action}"
     else:
         # no code to be executed, agent is done
-        code = "FINISHED"
+        obs = "FINISHED"
     
-    return code
+    return obs
 
-
-def execute_action(action: str):
-    with open("temp_action.py", "w") as f:
-        f.write(action)
-    
-    # Execute the code and capture the output
-    try:
-        result = subprocess.run(
-            ["python", "temp_action.py"], 
-            capture_output=True, 
-            text=True,
-            timeout=30
-        )
-        observation = f"Action executed. Output:\n{result.stdout}\n"
-        if result.stderr:
-            observation += f"Errors:\n{result.stderr}"
-    except Exception as e:
-        observation = f"Failed to execute action: {str(e)}"
-    
-    # Clean up the temporary file
-    if os.path.exists("temp_action.py"):
-        os.remove("temp_action.py")
-    return observation
 
 
 def get_response_from_model(messages):
     from openai import OpenAI
+
     model = OpenAI(
         base_url= "https://api.deepseek.com/v1",
         api_key=os.environ["DEEPSEEK_API_KEY"],   
@@ -232,7 +84,7 @@ def get_response_from_model(messages):
     print(f"Tokens stats: {useage}")
     return raw_output
 
-async def get_latest_snapshot(client):
+async def get_latest_snapshot(client, log_dir, step_num):
     """
     Get the latest snapshot from the browser client.
     """
@@ -240,6 +92,63 @@ async def get_latest_snapshot(client):
     try:
         # Use the accessibility_snapshot_as_yaml method from the client
         text = client.accessibility_snapshot_as_yaml()
+        # check if the directory exists
+        if not os.path.exists(f"{log_dir}/accessibility"):
+            os.makedirs(f"{log_dir}/accessibility")
+        # save the snapshot to a file
+        with open(f"{log_dir}/accessibility/snapshot_{step_num}.yaml", "w") as f:
+            f.write(text)
+        # get screen shot and save
+        # check if the directory exists
+        if not os.path.exists(f"{log_dir}/screenshots"):
+            os.makedirs(f"{log_dir}/screenshots")
+        filename = f"{log_dir}/screenshots/{step_num}.png"
+        client.screenshot(path=filename)
         return text
     except Exception as e:
         return f"Error getting snapshot: {str(e)}"
+    
+
+ENV_VARS = ("SHOPPING", "SHOPPING_ADMIN", "REDDIT", "GITLAB", "WIKIPEDIA", "MAP", "HOMEPAGE")
+
+def setup_env():
+    append_wa = lambda x: f"WA_{x}"
+    for key in ENV_VARS:
+        assert append_wa(key) in os.environ, (
+            f"Environment variable {append_wa(key)} missing.\n"
+            + "Please set the following environment variables to use WebArena through BrowserGym:\n"
+            + "\n".join([append_wa(x) for x in ENV_VARS])
+        )
+        os.environ[key] = os.environ[append_wa(key)]
+
+def get_site_login(site: str):
+    # setup webarena environment variables (webarena will read those on import)
+    setup_env()
+
+    # import webarena on instanciation
+    from webarena.browser_env.env_config import (
+        ACCOUNTS,
+        # GITLAB,
+        # HOMEPAGE,
+        # MAP,
+        # REDDIT,
+        # SHOPPING,
+        SHOPPING_ADMIN,
+        # WIKIPEDIA,
+    )
+
+    urls = {
+            # "reddit": REDDIT,
+            # "gitlab": GITLAB,
+            # "shopping": SHOPPING,
+            "shopping_admin": SHOPPING_ADMIN,
+            # "wikipedia": WIKIPEDIA,
+            # "map": MAP,
+        }
+
+    username = ACCOUNTS[site]["username"]
+    password = ACCOUNTS[site]["password"]
+    url = urls[site]
+    print(f"URL: {url}")
+
+    return url, username, password

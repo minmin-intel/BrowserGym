@@ -5,6 +5,7 @@ Example client for the Playwright browser sandbox API.
 
 import argparse
 import json
+import re
 import requests
 import sys
 import time
@@ -86,23 +87,23 @@ class PlaywrightClient:
         )
         return response.json()
     
-    def get_by_label_fill(self, label: str, text: str, exact: bool = False) -> Dict:
+    def get_by_label_fill(self, label: str, text: str, exact: bool = True) -> Dict:
         """Find an element by its label text and fill it with the provided text."""
         if not self.page_id:
             raise ValueError("Page not created yet")
         
         response = requests.post(
             f"{self.base_url}/page/{self.page_id}/get_by_label_fill",
-            json={"label": label, "text": text, "exact": exact}
+            json={"label": label, "text": text, "exact": exact, "timeout": 3000}
         )
         return response.json()
     
-    def get_by_role_click(self, role: str, name: Optional[str] = None, exact: bool = False) -> Dict:
+    def get_by_role_click(self, role: str, name: Optional[str] = None, exact: bool = True) -> Dict:
         """Find an element by its ARIA role and name, and click on it."""
         if not self.page_id:
             raise ValueError("Page not created yet")
         
-        payload = {"role": role, "exact": exact}
+        payload = {"role": role, "exact": exact, "timeout": 3000}
         if name is not None:
             payload["name"] = name
             
@@ -133,7 +134,7 @@ class PlaywrightClient:
         )
         return response.json()
     
-    def screenshot(self, path: Optional[str] = None, full_page: bool = False, timeout: int = 60000) -> Dict:
+    def screenshot(self, path: Optional[str] = None, full_page: bool = False, timeout: int = 30000) -> Dict:
         """Take a screenshot of the page."""
         if not self.page_id:
             raise ValueError("Page not created yet")
@@ -182,7 +183,15 @@ class PlaywrightClient:
         # Add important accessibility properties
         for key in ["role", "name", "value", "description", "checked"]:
             if key in node and node[key] is not None and node[key] != "":
-                simplified[key] = node[key]
+                # Strip Unicode characters for 'name' field
+                if key == "name" and isinstance(node[key], str):
+                    # Remove all non-ASCII characters (Unicode icons)
+                    text = re.sub(r'[^\x00-\x7F]+', '', node[key])
+                    # Then remove any leading spaces that might have been left
+                    # This ensures "\\uE60A REPORTS" becomes "REPORTS" without leading space
+                    simplified[key] = text.strip()
+                else:
+                    simplified[key] = node[key]
         
         # Process children separately
         children = node.get("children", [])

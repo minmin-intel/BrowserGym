@@ -39,7 +39,7 @@ class BrowserConfig(BaseModel):
 
 class NavigateRequest(BaseModel):
     url: str
-    timeout: int = 30000
+    timeout: int = 3000
     wait_until: str = "networkidle"  # load, domcontentloaded, networkidle
 
 class ClickRequest(BaseModel):
@@ -49,24 +49,24 @@ class ClickRequest(BaseModel):
     delay: int = 0
     position_x: Optional[float] = None
     position_y: Optional[float] = None
-    timeout: int = 30000
+    timeout: int = 3000
 
 class TypeRequest(BaseModel):
     selector: str
     text: str
     delay: int = 0
-    timeout: int = 30000
+    timeout: int = 3000
 
 class GetByLabelFillRequest(BaseModel):
     label: str
     text: str
-    exact: bool = False
-    timeout: int = 30000
+    exact: bool = True
+    timeout: int = 3000
 
 class WaitForSelectorRequest(BaseModel):
     selector: str
     state: str = "visible"  # attached, detached, visible, hidden
-    timeout: int = 30000
+    timeout: int = 3000
 
 class EvaluateRequest(BaseModel):
     expression: str
@@ -236,8 +236,8 @@ async def get_by_label_fill(page_id: str, request: GetByLabelFillRequest):
 class GetByRoleClickRequest(BaseModel):
     role: str
     name: Optional[str] = None
-    exact: bool = False
-    timeout: int = 30000
+    exact: bool = True
+    timeout: int = 3000
 
 
 @app.post("/page/{page_id}/get_by_role_click", response_model=Dict)
@@ -300,7 +300,7 @@ async def screenshot(page_id: str, request: ScreenshotRequest):
         # Add timeout to options and increase it for container environments
         options = {
             "full_page": request.full_page,
-            "timeout": 60000  # Increase timeout to 60 seconds
+            "timeout": 30000  # Increase timeout to 60 seconds
         }
         
         if request.path:
