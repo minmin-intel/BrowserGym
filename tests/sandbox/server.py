@@ -57,6 +57,12 @@ class TypeRequest(BaseModel):
     delay: int = 0
     timeout: int = 30000
 
+class GetByLabelFillRequest(BaseModel):
+    label: str
+    text: str
+    exact: bool = False
+    timeout: int = 30000
+
 class WaitForSelectorRequest(BaseModel):
     selector: str
     state: str = "visible"  # attached, detached, visible, hidden
@@ -210,6 +216,48 @@ async def type_text(page_id: str, request: TypeRequest):
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Type operation failed: {str(e)}")
+
+
+@app.post("/page/{page_id}/get_by_label_fill", response_model=Dict)
+async def get_by_label_fill(page_id: str, request: GetByLabelFillRequest):
+    """Find an element by its label text and fill it with the provided text."""
+    if page_id not in page_pool:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    try:
+        page = page_pool[page_id]
+        locator = page.get_by_label(request.label, exact=request.exact)
+        await locator.fill(request.text, timeout=request.timeout)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Get by label and fill operation failed: {str(e)}")
+
+
+class GetByRoleClickRequest(BaseModel):
+    role: str
+    name: Optional[str] = None
+    exact: bool = False
+    timeout: int = 30000
+
+
+@app.post("/page/{page_id}/get_by_role_click", response_model=Dict)
+async def get_by_role_click(page_id: str, request: GetByRoleClickRequest):
+    """Find an element by its ARIA role and name, and click on it."""
+    if page_id not in page_pool:
+        raise HTTPException(status_code=404, detail="Page not found")
+    
+    try:
+        page = page_pool[page_id]
+        options = {}
+        if request.name is not None:
+            options["name"] = request.name
+            options["exact"] = request.exact
+            
+        locator = page.get_by_role(request.role, **options)
+        await locator.click(timeout=request.timeout)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Get by role and click operation failed: {str(e)}")
 
 
 @app.post("/page/{page_id}/wait_for_selector", response_model=Dict)

@@ -86,14 +86,50 @@ class PlaywrightClient:
         )
         return response.json()
     
-    def evaluate(self, expression: str) -> Dict:
-        """Evaluate JavaScript in the page context."""
+    def get_by_label_fill(self, label: str, text: str, exact: bool = False) -> Dict:
+        """Find an element by its label text and fill it with the provided text."""
         if not self.page_id:
             raise ValueError("Page not created yet")
         
         response = requests.post(
+            f"{self.base_url}/page/{self.page_id}/get_by_label_fill",
+            json={"label": label, "text": text, "exact": exact}
+        )
+        return response.json()
+    
+    def get_by_role_click(self, role: str, name: Optional[str] = None, exact: bool = False) -> Dict:
+        """Find an element by its ARIA role and name, and click on it."""
+        if not self.page_id:
+            raise ValueError("Page not created yet")
+        
+        payload = {"role": role, "exact": exact}
+        if name is not None:
+            payload["name"] = name
+            
+        response = requests.post(
+            f"{self.base_url}/page/{self.page_id}/get_by_role_click",
+            json=payload
+        )
+        return response.json()
+    
+    def evaluate(self, expression: str, arg: Optional[Dict] = None) -> Dict:
+        """
+        Evaluate JavaScript in the page context.
+        
+        Args:
+            expression: JavaScript code to evaluate
+            arg: Optional argument to pass to the expression
+        """
+        if not self.page_id:
+            raise ValueError("Page not created yet")
+        
+        payload = {"expression": expression}
+        if arg is not None:
+            payload["arg"] = arg
+            
+        response = requests.post(
             f"{self.base_url}/page/{self.page_id}/evaluate",
-            json={"expression": expression}
+            json=payload
         )
         return response.json()
     
@@ -220,17 +256,17 @@ def main():
         try:
             a11y_result = client.accessibility_snapshot()
             root_role = a11y_result.get('snapshot', {}).get('role', 'unknown')
-            print(f"Accessibility tree root: {root_role}")
+            print(f"Accessibility tree: {json.dumps(a11y_result, indent=2)}")
             
             # Convert to YAML format
             print("\nConverting accessibility tree to YAML format...")
             yaml_output = client.accessibility_snapshot_as_yaml()
             
             # Save YAML to file
-            # yaml_file = args.a11y_output
-            # with open(yaml_file, "w") as f:
-            #     f.write(yaml_output)
-            # print(f"YAML accessibility tree saved to {yaml_file}")
+            yaml_file = args.a11y_output
+            with open(yaml_file, "w") as f:
+                f.write(yaml_output)
+            print(f"YAML accessibility tree saved to {yaml_file}")
             
             # Print a sample of the YAML (first 10 lines)
             print("\nSample of YAML output:")

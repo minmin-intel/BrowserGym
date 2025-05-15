@@ -35,7 +35,7 @@ docker build --build-arg http_proxy=$http_proxy \
 ## Running the Container
 
 ```bash
-docker run --name pw-sandbox -v $WORKDIR/BrowserGym/tests/sandbox:/app -e http_proxy=$http_proxy -e https_proxy=$https_proxy -p 8000:8000 -d playwright-sandbox
+docker run --name pw-sandbox -v $WORKDIR/BrowserGym/tests/sandbox:/app -e http_proxy=$http_proxy -e https_proxy=$https_proxy -e no_proxy=$no_proxy -p 8000:8000 -d playwright-sandbox
 ```
 
 This will start the server on port 8000.
