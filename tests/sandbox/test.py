@@ -145,31 +145,118 @@ def test_login_with_playwright_client():
         print(f"New URL after login: {new_url}")
         
         # Get accessibility tree after login
-        print("Getting accessibility tree after login...")
-        a11y_after = client.accessibility_snapshot()
-        with open("login_accessibility_tree.json", "w") as f:
-            json.dump(a11y_after, f, indent=4)
+        # print("Getting accessibility tree after login...")
+        # a11y_after = client.accessibility_snapshot()
+        # with open("login_accessibility_tree.json", "w") as f:
+        #     json.dump(a11y_after, f, indent=4)
         
-        # Convert to YAML and save
-        print("Saving accessibility tree as YAML...")
-        yaml_output = client.accessibility_snapshot_as_yaml()
-        with open("login_accessibility_tree.yaml", "w") as f:
-            f.write(yaml_output)
-        print("YAML accessibility tree saved to login_accessibility_tree.yaml")
-        client.screenshot(path="screenshot_login.png")
+        # # Convert to YAML and save
+        # print("Saving accessibility tree as YAML...")
+        # yaml_output = client.accessibility_snapshot_as_yaml()
+        # with open("login_accessibility_tree.yaml", "w") as f:
+        #     f.write(yaml_output)
+        # print("YAML accessibility tree saved to login_accessibility_tree.yaml")
+        client.screenshot(path="test_logs/screenshot_login.png")
+
         
-        print("Clicking on REPORTS link...")
-        client.get_by_role_click("link", name="REPORTS")
-        time.sleep(3)
-        a11y_after = client.accessibility_snapshot()
-        with open("report_accessibility_tree.json", "w") as f:
-            json.dump(a11y_after, f, indent=4)
-        yaml_output = client.accessibility_snapshot_as_yaml()
-        with open("report_accessibility_tree.yaml", "w") as f:
-            f.write(yaml_output)
-        # get screenshot and save
-        filename = f"screenshot_report.png"
-        client.screenshot(path=filename)
+        client.screenshot(path="test_logs/screenshot_report.png")
+        print("Getting clickable elements...")
+        try:
+            # Get all clickable elements that are visible
+            clickable_elements_result = client.get_clickable_elements(include_disabled=False, include_hidden=False)
+            
+            if clickable_elements_result.get("status") == "success" and "clickable_elements" in clickable_elements_result:
+                elements = clickable_elements_result["clickable_elements"]
+                print(f"\nFound {len(elements)} clickable elements on the page:")
+                
+                # Save the clickable elements to a file
+                clickable_file = "test_logs/clickable_elements_after_login.json"
+                with open(clickable_file, "w") as f:
+                    json.dump(elements, f, indent=2)
+                print(f"Clickable elements saved to {clickable_file}")
+                
+                # Print a sample of the elements (first 5)
+                sample_size = min(5, len(elements))
+                for i in range(sample_size):
+                    element = elements[i]
+                    print(f"\nElement {i+1}:")
+                    print(f"  Type: {element.get('tag')}")
+                    print(f"  Text: {element.get('text', '')[:50]}...")
+                    print(f"  URL: {element.get('href', 'N/A')}")
+                    print(f"  Selectors: {', '.join(element.get('selectors', [])[:2])}")  # Show first 2 selectors
+                
+                if len(elements) > sample_size:
+                    print(f"... and {len(elements) - sample_size} more elements")
+                    
+                print("\nYou can now click on any of these elements using the client.click() method with one of the provided selectors.")
+
+                term = "reports"
+                best_element = client.find_best_element(term, elements, match_type="all")
+                if best_element:
+                    print(f"Found a matching element for '{term}':")
+                    print(f"  Type: {best_element.get('tag')}")
+                    print(f"  Text: {best_element.get('text', '')[:50]}")
+                    print(f"  Selector: {best_element.get('selectors', [])[0] if best_element.get('selectors') else 'N/A'}")
+
+                click_result = client.click(best_element.get('selectors', [])[0])
+                print(f"Click result: {click_result}")
+        except Exception as e:
+            print(f"Failed to get clickable elements: {e}")
+
+        # print("Clicking on REPORTS link...")
+        
+        # result = client.get_by_role_click("link", name="REPORTS", exact=False)
+        # print(result)
+        # print("Clicking on REPORTS link: ",get_status_from_server_response(result))
+        # time.sleep(3)
+        # # a11y_after = client.accessibility_snapshot()
+        # # with open("report_accessibility_tree.json", "w") as f:
+        # #     json.dump(a11y_after, f, indent=4)
+        # # yaml_output = client.accessibility_snapshot_as_yaml()
+        # # with open("report_accessibility_tree.yaml", "w") as f:
+        # #     f.write(yaml_output)
+        # # # get screenshot and save
+
+        # print("Clicking on Bestsellers link...")
+        # # Bestsellers requires exact=True to avoid matching the tab element with a longer name
+        # result = client.get_by_role_click("link", name="Bestsellers", exact=True)
+        # print(result)
+        # print("Clicking on Bestsellers link: ",get_status_from_server_response(result))
+        # time.sleep(3)
+        # client.screenshot(path="test_logs/screenshot_bestsellers.png")
+
+        # print("getting snapshot of the page...")
+        # yaml_output = client.accessibility_snapshot_as_yaml()
+        # with open("test_logs/report_accessibility_tree.yaml", "w") as f:
+        #     f.write(yaml_output)
+        # print("YAML accessibility tree saved.")
+
+        # print("Getting merged AXTree as text...")
+        # try:
+        #     # Get the AXTree as text with formatting options
+        #     axtree_text = client.merged_axtree_as_text(
+        #         with_visible=True,
+        #         with_clickable=True,
+        #         skip_generic=True
+        #     )
+            
+        #     # Save the text to a file
+        #     axtree_file = "test_logs/merged_axtree.txt"
+        #     with open(axtree_file, "w") as f:
+        #         f.write(axtree_text)
+        #     print(f"Merged AXTree text saved to {axtree_file}")
+            
+        #     # Print a sample of the text (first 10 lines)
+        #     print("\nSample of AXTree text output:")
+        #     axtree_lines = axtree_text.split('\n')
+        #     sample_lines = min(10, len(axtree_lines))
+        #     for i in range(sample_lines):
+        #         print(axtree_lines[i])
+        #     if len(axtree_lines) > sample_lines:
+        #         print("... (truncated)")
+                
+        # except Exception as e:
+        #     print(f"Failed to get merged AXTree: {e}")
 
         return new_url
     

@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 
 def get_status_from_server_response(response):
     """
@@ -56,8 +57,10 @@ def click(client, action):
                 # Default to "link" if still invalid
                 if role.lower() not in valid_roles:
                     role = "link"
+            
             result = client.get_by_role_click(role=role, name=element_name)
-            print(result)
+            time.sleep(3)  # Wait for the action to complete
+            print("Click action: ", result)
             observation = f"click({role}, {element_name}): {get_status_from_server_response(result)}"
         elif len(args) == 1:
             # Format: click("name")
@@ -72,6 +75,7 @@ def click(client, action):
             elif "textbox" in element_name.lower() or "input" in element_name.lower():
                 role = "textbox"
             result = client.get_by_role_click(role=role, name=element_name)
+            time.sleep(3)  # Wait for the action to complete
             print(result)
             observation = f"click({role}, {element_name}): {get_status_from_server_response(result)}"
         else:
@@ -119,6 +123,8 @@ def type_text(client, action):
             element_name = args[0]
             text = args[1]
             result = client.get_by_label_fill(label=element_name, text=text)
+            print("Type action: ", result)
+            time.sleep(3)  # Wait for the action to complete
             observation = f"type({element_name}, {text}): {get_status_from_server_response(result)}"
         else:
             observation = "Not enough arguments for type action"
@@ -137,6 +143,8 @@ def navigate(client, action):
         print(f"Parsed URL: {url}")
         
         result = client.navigate(url)
+        print("Navigate action: ", result)
+        time.sleep(3)  # Wait for the action to complete
         observation = f"navigate({url}): {get_status_from_server_response(result)}"
     except Exception as e:
         observation = f"Error parsing navigate action: {str(e)}"
